@@ -421,7 +421,7 @@ CLASS cl_objects_list IMPLEMENTATION.
           version_list TYPE STANDARD TABLE OF vrsd,
           lv_sysname LIKE LINE OF gt_sysname_intsys,
           ls_version_list TYPE vrsd,
-          ls_version_list1 TYPE vrsd,
+          ls_version_list_sel TYPE vrsd,
           lv_korrnum TYPE verskorrno,
           lv_korrnum_before TYPE verskorrno.
     DATA: lr_target TYPE RANGE OF verssysnam,
@@ -463,7 +463,7 @@ CLASS cl_objects_list IMPLEMENTATION.
           objname_short = objname
         IMPORTING
           objname_long  = objname.
-      CLEAR: lv_korrnum_before, lv_red, <lt_itab_obj>[].
+      CLEAR: lv_korrnum_before, lv_red, <lt_itab_obj>[], ls_version_list_sel.
       LOOP AT gt_systems INTO lv_system.
         LOOP AT gt_allowed_systems INTO ls_tmscsys WHERE sysnam EQ lv_system.
           CLEAR: lv_destination, version_list[], lversno_list[], returncode.
@@ -506,7 +506,12 @@ CLASS cl_objects_list IMPLEMENTATION.
                   CATCH cx_exception01.
                     APPEND INITIAL LINE TO <lt_itab_obj> ASSIGNING <ls_wa>.
                     lo_object->fill_result( CHANGING _cs_result = <ls_wa> ).
-                    IF lv_korrnum_before IS INITIAL AND ls_version_list-korrnum NOT IN requests.
+                    IF ls_version_list-korrnum IN requests.
+                      ls_version_list_sel = ls_version_list.
+                    ENDIF.
+                    IF lv_korrnum_before IS INITIAL AND
+                       ls_version_list-korrnum NOT IN requests AND
+                       ls_version_list-versno LT ls_version_list_sel-versno.
                       lv_korrnum_before = ls_version_list-korrnum.
                     ENDIF.
                 ENDTRY.
