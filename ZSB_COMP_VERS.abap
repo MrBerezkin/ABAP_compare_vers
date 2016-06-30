@@ -171,6 +171,22 @@ CLASS cl_event_handler DEFINITION.
         IMPORTING row column.
 ENDCLASS.                    "cl_event_handler DEFINITION
 
+*----------------------------------------------------------------------*
+*       CLASS cx_exeption01 DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cx_exeption01 DEFINITION INHERITING FROM cx_dynamic_check.
+ENDCLASS.                    "cx_exeption01 DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cx_exeption02 DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cx_exeption02 DEFINITION INHERITING FROM cx_dynamic_check.
+ENDCLASS.                    "cx_exeption02 DEFINITION
+
 SELECTION-SCREEN: BEGIN OF BLOCK b1.
 SELECT-OPTIONS: requests FOR e070-trkorr MEMORY ID kor.
 SELECT-OPTIONS: object FOR sctsobject-object.
@@ -280,7 +296,7 @@ CLASS cl_objects_list IMPLEMENTATION.
   ENDMETHOD.                    "find_object
 
   METHOD get_next_object.
-    IF LINES( gt_ref_objects[] ) LT gv_index.
+    IF lines( gt_ref_objects[] ) LT gv_index.
       CLEAR _ro_object.
       RETURN.
     ENDIF.
@@ -430,6 +446,27 @@ CLASS cl_objects_list IMPLEMENTATION.
             ENDIF.
           ENDLOOP.
         ENDLOOP.
+        LOOP AT lt_sysname_deliv_to INTO lv_sysname.
+          LOOP AT lt_deliver INTO  ls_deliver
+                             WHERE fromsystem EQ lv_sysname.
+            IF ls_deliver-tosystem(1) = '/'.
+* destination group
+              LOOP AT lt_target INTO ls_target
+                                WHERE targ_group = ls_deliver-tosystem AND
+                                      tarsystem NE space.
+                READ TABLE gt_allowed_systems WITH KEY sysnam = ls_target-tarsystem(3) TRANSPORTING NO FIELDS.
+                CHECK sy-subrc EQ 0.
+                COLLECT ls_target-tarsystem(3) INTO lt_sysname_deliv_to.
+              ENDLOOP.
+            ELSE.
+* destination system
+              READ TABLE gt_allowed_systems WITH KEY sysnam = ls_deliver-tosystem(3) TRANSPORTING NO FIELDS.
+              CHECK sy-subrc EQ 0.
+              COLLECT ls_deliver-tosystem(3) INTO lt_sysname_deliv_to.
+            ENDIF.
+          ENDLOOP.
+        ENDLOOP.
+
         LOOP AT lt_sysname_consys INTO lv_sysname.
           READ TABLE gt_sysname_intsys FROM lv_sysname TRANSPORTING NO FIELDS.
           CHECK sy-subrc EQ 0.
@@ -461,8 +498,8 @@ CLASS cl_objects_list IMPLEMENTATION.
   METHOD copy_components.
     DATA: ls_components TYPE abap_componentdescr,
           lv_fname TYPE string.
-    FIELD-SYMBOLS: <lv_fname1> TYPE ANY,
-                   <lv_fname2> TYPE ANY.
+    FIELD-SYMBOLS: <lv_fname1> TYPE any,
+                   <lv_fname2> TYPE any.
 
     LOOP AT gt_components_sys INTO ls_components.
       UNASSIGN: <lv_fname1>, <lv_fname2>.
@@ -476,7 +513,7 @@ CLASS cl_objects_list IMPLEMENTATION.
 
   METHOD get_korrnum.
     DATA: lv_fname TYPE string.
-    FIELD-SYMBOLS: <lv_fname> TYPE ANY.
+    FIELD-SYMBOLS: <lv_fname> TYPE any.
     CONCATENATE 'KORRNUM_' _iv_sysnam INTO lv_fname.
     ASSIGN COMPONENT lv_fname OF STRUCTURE _is_itab_ob TO <lv_fname>.
     CHECK <lv_fname> IS ASSIGNED.
@@ -519,8 +556,8 @@ CLASS cl_objects_list IMPLEMENTATION.
           lv_korrnum_before TYPE verskorrno.
     DATA: lv_del(1), lv_red(1), lv_ind LIKE sy-tabix.
     DATA: lr_itab_obj TYPE REF TO data.
-    FIELD-SYMBOLS: <ls_wa> TYPE ANY,
-                   <lv_fname1> TYPE ANY,
+    FIELD-SYMBOLS: <ls_wa> TYPE any,
+                   <lv_fname1> TYPE any,
                    <ls_color> TYPE lvc_s_scol,
                    <lt_itab> TYPE STANDARD TABLE,
                    <lt_itab_obj> TYPE STANDARD TABLE.
@@ -537,9 +574,13 @@ CLASS cl_objects_list IMPLEMENTATION.
 
     LOOP AT gt_systems INTO lv_system.
 
-      CALL METHOD _io_object->get_versions( EXPORTING _iv_tarsystem = lv_system
-                                            IMPORTING _et_version_list = version_list
-                                            EXCEPTIONS _ex_rfc_error = 1 ).
+      CALL METHOD _io_object->get_versions(
+        EXPORTING
+          _iv_tarsystem    = lv_system
+        IMPORTING
+          _et_version_list = version_list
+        EXCEPTIONS
+          _ex_rfc_error    = 1 ).
       CASE sy-subrc.
         WHEN 0.
           LOOP AT version_list INTO ls_version_list.
@@ -547,18 +588,18 @@ CLASS cl_objects_list IMPLEMENTATION.
                 LOOP AT <lt_itab_obj> ASSIGNING <ls_wa>.
                   LOOP AT gt_systems INTO ls_systems WHERE table_line NE lv_system.
                     CHECK me->get_korrnum( _is_itab_ob = <ls_wa> _iv_sysnam = ls_systems ) EQ ls_version_list-korrnum.
-                    RAISE EXCEPTION TYPE cx_exception00.
+                    RAISE EXCEPTION TYPE cx_exeption01.
                   ENDLOOP.
                 ENDLOOP.
-                RAISE EXCEPTION TYPE cx_exception01.
-              CATCH cx_exception00.
+                RAISE EXCEPTION TYPE cx_exeption02.
+              CATCH cx_exeption01.
                 IF ls_version_list-korrnum IS NOT INITIAL AND
                    ls_version_list-korrnum NOT IN requests AND
                    ls_version_list-korrnum NE lv_korrnum_before AND
                    lv_system IN target.
                   lv_red = 'X'.
                 ENDIF.
-              CATCH cx_exception01.
+              CATCH cx_exeption02.
                 APPEND INITIAL LINE TO <lt_itab_obj> ASSIGNING <ls_wa>.
                 _io_object->fill_result( CHANGING _cs_result = <ls_wa> ).
                 IF ls_version_list-korrnum IN requests.
@@ -579,7 +620,7 @@ CLASS cl_objects_list IMPLEMENTATION.
           ENDLOOP.
         WHEN OTHERS.
           lv_red = 'X'.
-          IF LINES( <lt_itab_obj>[] ) = 0.
+          IF lines( <lt_itab_obj>[] ) = 0.
             APPEND INITIAL LINE TO <lt_itab_obj> ASSIGNING <ls_wa>.
             _io_object->fill_result( CHANGING _cs_result = <ls_wa> ).
           ELSE.
@@ -603,7 +644,7 @@ CLASS cl_objects_list IMPLEMENTATION.
     ENDLOOP.
 
     IF history IS NOT INITIAL.
-      lv_ind = LINES( <lt_itab_obj>[] ).
+      lv_ind = lines( <lt_itab_obj>[] ).
       DO.
         lv_del = 'X'.
         READ TABLE <lt_itab_obj> ASSIGNING <ls_wa> INDEX lv_ind.
@@ -770,9 +811,9 @@ CLASS cl_object IMPLEMENTATION.
 
   METHOD fill_result.
     DATA: lv_ind TYPE i VALUE 1.
-    FIELD-SYMBOLS: <ls_wa>   TYPE ANY,
-                   <lv_fname1> TYPE ANY,
-                   <lv_fname2> TYPE ANY.
+    FIELD-SYMBOLS: <ls_wa>   TYPE any,
+                   <lv_fname1> TYPE any,
+                   <lv_fname2> TYPE any.
     DO.
       UNASSIGN: <lv_fname1>, <lv_fname2>.
       ASSIGN COMPONENT lv_ind OF STRUCTURE s_object TO <lv_fname1>.
@@ -918,8 +959,8 @@ CLASS cl_event_handler IMPLEMENTATION.
           objname TYPE vrsd-objname,
           korrnum TYPE trkorr.
     FIELD-SYMBOLS: <lt_itab> TYPE STANDARD TABLE,
-                   <ls_wa> TYPE ANY,
-                   <lv_field> TYPE ANY.
+                   <ls_wa> TYPE any,
+                   <lv_field> TYPE any.
 
     DEFINE get_component.
       unassign <lv_field>.
@@ -954,6 +995,20 @@ CLASS cl_event_handler IMPLEMENTATION.
 
 ENDCLASS.                    "cl_event_handler IMPLEMENTATION
 
+*----------------------------------------------------------------------*
+*       CLASS cx_exeption01 IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cx_exeption01 IMPLEMENTATION.
+ENDCLASS.                    "cx_exeption01 IMPLEMENTATION
+*----------------------------------------------------------------------*
+*       CLASS cx_exeption02 IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cx_exeption02 IMPLEMENTATION.
+ENDCLASS.                    "cx_exeption02 IMPLEMENTATION
 *&---------------------------------------------------------------------*
 *&      Form  authority_check
 *&---------------------------------------------------------------------*
@@ -1081,8 +1136,11 @@ FORM in_rfc
   lo_object = cl_object=>factory( _iv_xstr = ls_spta_package-object ).
 
   LOOP AT ls_spta_package-t_systems INTO ls_systems.
-    CALL METHOD lo_object->get_versions( EXPORTING _iv_tarsystem = ls_systems
-                                         EXCEPTIONS _ex_rfc_error = 1 ).
+    CALL METHOD lo_object->get_versions(
+      EXPORTING
+        _iv_tarsystem = ls_systems
+      EXCEPTIONS
+        _ex_rfc_error = 1 ).
   ENDLOOP.
 
   ls_spta_package-object = lo_object->serialize_me( ).
